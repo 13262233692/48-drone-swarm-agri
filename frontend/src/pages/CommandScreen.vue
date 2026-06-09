@@ -10,6 +10,20 @@
 
         <FarmBoundary :map="mapInstance!" />
         <DroneMapLayer :map="mapInstance!" />
+        <VoronoiCells :map="mapInstance!" />
+
+        <div
+          v-if="store.lastReschedule"
+          class="absolute top-3 left-1/2 -translate-x-1/2 hud-panel rounded px-4 py-2 border border-neon-green/40"
+          style="z-index: 1000;"
+        >
+          <div class="text-[11px] font-rajdhani font-bold text-neon-green">
+            ⚡ 编队重构完成 — {{ store.lastReschedule.assignments?.length || 0 }} 架存活无人机接管 {{ store.lastReschedule.reassignedArea?.toFixed(1) || 0 }} 公顷
+          </div>
+          <div class="text-[9px] text-gray-400 font-noto">
+            故障机: {{ store.lastReschedule.failedDroneId }}
+          </div>
+        </div>
 
         <div
           v-if="alarms.length > 0"
@@ -29,6 +43,12 @@
         </div>
 
         <div class="absolute top-3 right-3 flex flex-col gap-1" style="z-index: 1000;">
+          <button
+            class="hud-panel rounded px-3 py-2 text-[10px] font-rajdhani font-bold text-alarm-red hover:bg-alarm-red/20 transition-colors border border-alarm-red/40 animate-pulse"
+            @click="simulateCrash"
+          >
+            💥 模拟炸机
+          </button>
           <button
             v-for="drone in trackedDrones"
             :key="drone.droneId"
@@ -54,6 +74,7 @@ import FleetPanel from '@/components/FleetPanel.vue'
 import LiquidPanel from '@/components/LiquidPanel.vue'
 import FarmBoundary from '@/components/FarmBoundary.vue'
 import DroneMapLayer from '@/components/DroneMapLayer.vue'
+import VoronoiCells from '@/components/VoronoiCells.vue'
 import type { DroneTelemetry, LeafMap } from '@/shared/types'
 
 const mapContainer = ref<HTMLElement>()
@@ -114,5 +135,15 @@ function focusDrone(drone: DroneTelemetry) {
 function formatTime(ts: number): string {
   const d = new Date(ts)
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+function simulateCrash() {
+  const droneIds: string[] = []
+  store.drones.forEach((d) => {
+    if (d.status === 'flying') droneIds.push(d.droneId)
+  })
+  if (droneIds.length === 0) return
+  const target = droneIds[Math.floor(Math.random() * droneIds.length)]
+  store.simulateCrash(target)
 }
 </script>

@@ -26,6 +26,9 @@ let WsGateway = class WsGateway {
         this.eventEmitter.on('alarm', (data) => {
             this.server.emit('alarm', data);
         });
+        this.eventEmitter.on('reschedule', (data) => {
+            this.server.emit('reschedule', data);
+        });
     }
     handleConnection(client) {
         const allDrones = this.telemetryService.getAllDrones();

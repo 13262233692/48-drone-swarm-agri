@@ -10,11 +10,12 @@ import { WsModule } from './ws/ws.module.js';
 import { FarmsModule } from './farms/farms.module.js';
 import { SimulatorModule } from './simulator/simulator.module.js';
 import { EventsModule } from './events/events.module.js';
+import { SchedulerModule } from './scheduler/scheduler.module.js';
 let AppModule = class AppModule {
 };
 AppModule = __decorate([
     Module({
-        imports: [EventsModule, TelemetryModule, WsModule, FarmsModule, SimulatorModule],
+        imports: [EventsModule, TelemetryModule, WsModule, FarmsModule, SchedulerModule, SimulatorModule],
     })
 ], AppModule);
 export { AppModule };

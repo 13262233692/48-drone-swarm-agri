@@ -19,6 +19,8 @@ export const useFleetStore = defineStore('fleet', () => {
   const alarms = reactive<AlarmEvent[]>([])
   const farms = reactive<FarmBoundary[]>([])
   const connected = ref(false)
+  const voronoiAssignments = reactive<any[]>([])
+  const lastReschedule = ref<any>(null)
 
   let socket: Socket | null = null
   const lastSeqPerDrone = new Map<string, number>()
@@ -126,6 +128,11 @@ export const useFleetStore = defineStore('fleet', () => {
       if (alarms.length > 100) alarms.pop()
     })
 
+    socket.on('reschedule', (data: any) => {
+      lastReschedule.value = data
+      voronoiAssignments.splice(0, voronoiAssignments.length, ...data.assignments)
+    })
+
     socket.on('reconnect_attempt', () => {
       connected.value = false
     })
@@ -157,6 +164,21 @@ export const useFleetStore = defineStore('fleet', () => {
     return drones.get(droneId)
   }
 
+  async function simulateCrash(droneId: string) {
+    try {
+      const res = await fetch(`${API_BASE}/api/scheduler/simulate-crash/${droneId}`, { method: 'POST' })
+      return await res.json()
+    } catch {}
+  }
+
+  async function fetchAssignments() {
+    try {
+      const res = await fetch(`${API_BASE}/api/scheduler/assignments`)
+      const data = await res.json()
+      voronoiAssignments.splice(0, voronoiAssignments.length, ...data)
+    } catch {}
+  }
+
   initDroneInfos()
   connect()
   fetchFarms()
@@ -178,5 +200,9 @@ export const useFleetStore = defineStore('fleet', () => {
     fetchFarms,
     getDroneInfo,
     getDroneTelemetry,
+    simulateCrash,
+    fetchAssignments,
+    voronoiAssignments,
+    lastReschedule,
   }
 })

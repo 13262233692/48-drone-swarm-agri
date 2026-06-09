@@ -31,6 +31,10 @@ export class WsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayD
     this.eventEmitter.on('alarm', (data: any) => {
       this.server.emit('alarm', data)
     })
+
+    this.eventEmitter.on('reschedule', (data: any) => {
+      this.server.emit('reschedule', data)
+    })
   }
 
   handleConnection(client: Socket) {
