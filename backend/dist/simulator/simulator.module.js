@@ -6,10 +6,12 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 };
 import { Module } from '@nestjs/common';
 import { SimulatorService } from './simulator.service.js';
+import { TelemetryModule } from '../telemetry/telemetry.module.js';
 let SimulatorModule = class SimulatorModule {
 };
 SimulatorModule = __decorate([
     Module({
+        imports: [TelemetryModule],
         providers: [SimulatorService],
     })
 ], SimulatorModule);

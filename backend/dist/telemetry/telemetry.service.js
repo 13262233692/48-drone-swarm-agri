@@ -10,23 +10,31 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 import { Injectable } from '@nestjs/common';
 import EventEmitter2 from 'eventemitter2';
 import * as mqtt from 'mqtt';
+import { DedupService } from './dedup.service.js';
 const LOW_LIQUID_THRESHOLD = 0.15;
 const OFFLINE_TIMEOUT_MS = 10000;
 const MAX_TRAJECTORY_POINTS = 2000;
+const TELEMETRY_QOS = 0;
 let TelemetryService = class TelemetryService {
-    constructor(eventEmitter) {
+    constructor(eventEmitter, dedupService) {
         this.eventEmitter = eventEmitter;
+        this.dedupService = dedupService;
         this.droneStates = new Map();
         this.trajectories = new Map();
         this.lastHeartbeat = new Map();
         this.mqttClient = null;
         this.offlineCheckInterval = null;
         this.summaryInterval = null;
+        this.statsInterval = null;
+        this.duplicateCount = 0;
+        this.rateLimitedCount = 0;
+        this.processedCount = 0;
     }
     onModuleInit() {
         this.connectMqtt();
         this.startOfflineCheck();
         this.startSummaryBroadcast();
+        this.startStatsLog();
     }
     onModuleDestroy() {
         if (this.mqttClient) {
@@ -36,6 +44,8 @@ let TelemetryService = class TelemetryService {
             clearInterval(this.offlineCheckInterval);
         if (this.summaryInterval)
             clearInterval(this.summaryInterval);
+        if (this.statsInterval)
+            clearInterval(this.statsInterval);
     }
     connectMqtt() {
         const brokerUrl = process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883';
@@ -47,12 +57,12 @@ let TelemetryService = class TelemetryService {
                 reconnectPeriod: 3000,
             });
             this.mqttClient.on('connect', () => {
-                this.mqttClient.subscribe('telemetry/#', { qos: 1 });
+                this.mqttClient.subscribe('telemetry/#', { qos: TELEMETRY_QOS });
             });
-            this.mqttClient.on('message', (topic, message) => {
+            this.mqttClient.on('message', (topic, message, packet) => {
                 try {
                     const data = JSON.parse(message.toString());
-                    this.processTelemetry(data);
+                    this.ingestTelemetry(data, packet.qos ?? 0);
                 }
                 catch { }
             });
@@ -60,7 +70,19 @@ let TelemetryService = class TelemetryService {
         }
         catch { }
     }
+    ingestTelemetry(data, receivedQos) {
+        if (this.dedupService.isDuplicate(data.droneId, data.timestamp, data.seq)) {
+            this.duplicateCount++;
+            return;
+        }
+        if (this.dedupService.isRateLimited(data.droneId)) {
+            this.rateLimitedCount++;
+            return;
+        }
+        this.processTelemetry(data);
+    }
     processTelemetry(data) {
+        this.processedCount++;
         const prev = this.droneStates.get(data.droneId);
         this.droneStates.set(data.droneId, data);
         this.lastHeartbeat.set(data.droneId, Date.now());
@@ -115,6 +137,15 @@ let TelemetryService = class TelemetryService {
             this.eventEmitter.emit('fleet_summary', summary);
         }, 2000);
     }
+    startStatsLog() {
+        this.statsInterval = setInterval(() => {
+            const ds = this.dedupService.getStats();
+            console.log(`[Telemetry] processed=${this.processedCount} duplicates_dropped=${this.duplicateCount} rate_limited=${this.rateLimitedCount} dedup_cache=${ds.dedupCacheSize}`);
+            this.duplicateCount = 0;
+            this.rateLimitedCount = 0;
+            this.processedCount = 0;
+        }, 10000);
+    }
     getFleetSummary() {
         let online = 0;
         let lowLiquid = 0;
@@ -149,6 +180,7 @@ let TelemetryService = class TelemetryService {
 };
 TelemetryService = __decorate([
     Injectable(),
-    __metadata("design:paramtypes", [EventEmitter2])
+    __metadata("design:paramtypes", [EventEmitter2,
+        DedupService])
 ], TelemetryService);
 export { TelemetryService };

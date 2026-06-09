@@ -8,7 +8,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 import { Injectable } from '@nestjs/common';
-import EventEmitter2 from 'eventemitter2';
+import { TelemetryService } from '../telemetry/telemetry.service.js';
 const DRONE_COUNT = 50;
 const TELEMETRY_INTERVAL_MS = 500;
 const LIQUID_DECREASE_PER_TICK = 30;
@@ -22,10 +22,11 @@ const FARM_CENTERS = [
 ];
 const DRONE_MODELS = ['DJI T40', 'DJI T30', 'XAircraft P80', 'DJI T40', 'DJI T30'];
 let SimulatorService = class SimulatorService {
-    constructor(eventEmitter) {
-        this.eventEmitter = eventEmitter;
+    constructor(telemetryService) {
+        this.telemetryService = telemetryService;
         this.drones = [];
         this.intervalId = null;
+        this.seqCounter = 0;
     }
     onModuleInit() {
         this.initDrones();
@@ -141,13 +142,14 @@ let SimulatorService = class SimulatorService {
                 heading: Math.round(drone.heading * 10) / 10,
                 status: drone.status,
                 timestamp: Date.now(),
+                seq: ++this.seqCounter,
             };
-            this.eventEmitter.emit('telemetry', telemetry);
+            this.telemetryService.ingestTelemetry(telemetry, 0);
         }
     }
 };
 SimulatorService = __decorate([
     Injectable(),
-    __metadata("design:paramtypes", [EventEmitter2])
+    __metadata("design:paramtypes", [TelemetryService])
 ], SimulatorService);
 export { SimulatorService };

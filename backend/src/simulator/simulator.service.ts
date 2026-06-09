@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common'
-import EventEmitter2 from 'eventemitter2'
+import { TelemetryService } from '../telemetry/telemetry.service.js'
 import type { DroneTelemetry } from '../shared/types.js'
 
 const DRONE_COUNT = 50
@@ -47,8 +47,9 @@ const DRONE_MODELS = ['DJI T40', 'DJI T30', 'XAircraft P80', 'DJI T40', 'DJI T30
 export class SimulatorService implements OnModuleInit, OnModuleDestroy {
   private drones: SimDrone[] = []
   private intervalId: NodeJS.Timeout | null = null
+  private seqCounter = 0
 
-  constructor(private eventEmitter: EventEmitter2) {}
+  constructor(private telemetryService: TelemetryService) {}
 
   onModuleInit() {
     this.initDrones()
@@ -171,9 +172,10 @@ export class SimulatorService implements OnModuleInit, OnModuleDestroy {
         heading: Math.round(drone.heading * 10) / 10,
         status: drone.status,
         timestamp: Date.now(),
+        seq: ++this.seqCounter,
       }
 
-      this.eventEmitter.emit('telemetry', telemetry)
+      this.telemetryService.ingestTelemetry(telemetry, 0)
     }
   }
 }

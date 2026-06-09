@@ -1,10 +1,11 @@
 import { OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import EventEmitter2 from 'eventemitter2';
+import { TelemetryService } from '../telemetry/telemetry.service.js';
 export declare class SimulatorService implements OnModuleInit, OnModuleDestroy {
-    private eventEmitter;
+    private telemetryService;
     private drones;
     private intervalId;
-    constructor(eventEmitter: EventEmitter2);
+    private seqCounter;
+    constructor(telemetryService: TelemetryService);
     onModuleInit(): void;
     onModuleDestroy(): void;
     private initDrones;

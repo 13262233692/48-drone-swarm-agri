@@ -9,6 +9,7 @@ export interface DroneTelemetry {
   heading: number
   status: 'idle' | 'flying' | 'returning' | 'error'
   timestamp: number
+  seq?: number
 }
 
 export interface FleetSummary {

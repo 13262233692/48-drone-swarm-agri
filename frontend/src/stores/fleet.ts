@@ -21,6 +21,8 @@ export const useFleetStore = defineStore('fleet', () => {
   const connected = ref(false)
 
   let socket: Socket | null = null
+  const lastSeqPerDrone = new Map<string, number>()
+  const lastTimestampPerDrone = new Map<string, number>()
 
   const onlineDrones = computed(() => {
     const list: DroneTelemetry[] = []
@@ -98,6 +100,16 @@ export const useFleetStore = defineStore('fleet', () => {
     })
 
     socket.on('telemetry', (data: DroneTelemetry) => {
+      if (data.seq !== undefined) {
+        const lastSeq = lastSeqPerDrone.get(data.droneId)
+        if (lastSeq !== undefined && data.seq <= lastSeq) return
+        lastSeqPerDrone.set(data.droneId, data.seq)
+      } else {
+        const lastTs = lastTimestampPerDrone.get(data.droneId)
+        if (lastTs !== undefined && data.timestamp <= lastTs) return
+        lastTimestampPerDrone.set(data.droneId, data.timestamp)
+      }
+
       drones.set(data.droneId, data)
       const info = droneInfos.get(data.droneId)
       if (info) {

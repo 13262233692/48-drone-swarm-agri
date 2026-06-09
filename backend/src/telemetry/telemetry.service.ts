@@ -1,11 +1,13 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common'
 import EventEmitter2 from 'eventemitter2'
 import * as mqtt from 'mqtt'
+import { DedupService } from './dedup.service.js'
 import type { DroneTelemetry, FleetSummary, AlarmEvent, TrajectoryPoint } from '../shared/types.js'
 
 const LOW_LIQUID_THRESHOLD = 0.15
 const OFFLINE_TIMEOUT_MS = 10000
 const MAX_TRAJECTORY_POINTS = 2000
+const TELEMETRY_QOS = 0
 
 @Injectable()
 export class TelemetryService implements OnModuleInit, OnModuleDestroy {
@@ -15,13 +17,21 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
   private mqttClient: mqtt.MqttClient | null = null
   private offlineCheckInterval: NodeJS.Timeout | null = null
   private summaryInterval: NodeJS.Timeout | null = null
+  private statsInterval: NodeJS.Timeout | null = null
+  private duplicateCount = 0
+  private rateLimitedCount = 0
+  private processedCount = 0
 
-  constructor(private eventEmitter: EventEmitter2) {}
+  constructor(
+    private eventEmitter: EventEmitter2,
+    private dedupService: DedupService,
+  ) {}
 
   onModuleInit() {
     this.connectMqtt()
     this.startOfflineCheck()
     this.startSummaryBroadcast()
+    this.startStatsLog()
   }
 
   onModuleDestroy() {
@@ -30,6 +40,7 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
     }
     if (this.offlineCheckInterval) clearInterval(this.offlineCheckInterval)
     if (this.summaryInterval) clearInterval(this.summaryInterval)
+    if (this.statsInterval) clearInterval(this.statsInterval)
   }
 
   private connectMqtt() {
@@ -43,13 +54,13 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
       })
 
       this.mqttClient.on('connect', () => {
-        this.mqttClient!.subscribe('telemetry/#', { qos: 1 })
+        this.mqttClient!.subscribe('telemetry/#', { qos: TELEMETRY_QOS })
       })
 
-      this.mqttClient.on('message', (topic, message) => {
+      this.mqttClient.on('message', (topic, message, packet) => {
         try {
           const data = JSON.parse(message.toString()) as DroneTelemetry
-          this.processTelemetry(data)
+          this.ingestTelemetry(data, packet.qos ?? 0)
         } catch {}
       })
 
@@ -57,7 +68,22 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
     } catch {}
   }
 
+  ingestTelemetry(data: DroneTelemetry, receivedQos: number) {
+    if (this.dedupService.isDuplicate(data.droneId, data.timestamp, data.seq)) {
+      this.duplicateCount++
+      return
+    }
+
+    if (this.dedupService.isRateLimited(data.droneId)) {
+      this.rateLimitedCount++
+      return
+    }
+
+    this.processTelemetry(data)
+  }
+
   processTelemetry(data: DroneTelemetry) {
+    this.processedCount++
     const prev = this.droneStates.get(data.droneId)
     this.droneStates.set(data.droneId, data)
     this.lastHeartbeat.set(data.droneId, Date.now())
@@ -116,6 +142,18 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
       const summary = this.getFleetSummary()
       this.eventEmitter.emit('fleet_summary', summary)
     }, 2000)
+  }
+
+  private startStatsLog() {
+    this.statsInterval = setInterval(() => {
+      const ds = this.dedupService.getStats()
+      console.log(
+        `[Telemetry] processed=${this.processedCount} duplicates_dropped=${this.duplicateCount} rate_limited=${this.rateLimitedCount} dedup_cache=${ds.dedupCacheSize}`,
+      )
+      this.duplicateCount = 0
+      this.rateLimitedCount = 0
+      this.processedCount = 0
+    }, 10000)
   }
 
   getFleetSummary(): FleetSummary {
